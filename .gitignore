@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Data files (large, user-specific)
+data/
+*.wav
+
+# IDE
+.vscode/
+.idea/
+
+# PyInstaller
+DictionaryApp.spec
+DictionaryAppOneFile.spec
+
+# Misc
+.pytest_cache/
+tmp_extract/
+~$*
+*.docx
+runvn.html
+Prompt_History.docx

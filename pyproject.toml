@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dictionary-app-2"
+version = "0.1.0"
+description = "Local dictionary CLI with fast lookup, prefix search, text analysis, SRS, and optional AI support."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["dictionary_app*"]
