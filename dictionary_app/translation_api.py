@@ -36,6 +36,24 @@ class TranslationClient:
         save_json(self.cache_path, self.cache)
         return result
 
+    def translate_lines(self, lines: list[str], timeout: int = 10) -> str:
+        """Translate each line individually and return them joined with newlines.
+
+        This ensures the number of Vietnamese lines matches the English lines.
+        """
+        results: list[str] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            translated = self.translate(line, timeout=timeout)
+            if translated:
+                results.append(translated)
+            else:
+                # Keep original if translation fails
+                results.append(line)
+        return "\n".join(results)
+
     def _fetch(self, word: str, timeout: int = 10) -> str:
         params = urllib.parse.urlencode({"q": word, "langpair": "en|vi"})
         url = f"{self.BASE_URL}?{params}"

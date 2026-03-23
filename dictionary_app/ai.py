@@ -96,3 +96,93 @@ class GeminiExplainClient:
         }
         payload = post_generate_content(self.api_key, self.model, body, timeout=30)
         return payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    # --- Grammar correction via AI ---
+    def grammar_correct(self, sentence: str) -> dict[str, str]:
+        """Use Gemini to correct grammar and suggest improvements."""
+        if not self.enabled:
+            raise RuntimeError("Gemini API key not configured. Set GEMINI_API_KEY to enable AI grammar check.")
+        sanitized = PHONE_RE.sub("[phone]", EMAIL_RE.sub("[email]", sentence))
+        prompt = (
+            "You are an expert English grammar teacher. Analyze the following sentence and return strict JSON with keys:\n"
+            "- corrected: the corrected sentence following formal English grammar\n"
+            "- issues: a list of objects, each with 'original', 'correction', and 'explanation'\n"
+            "- formal_version: rewrite the sentence in a formal, polished way\n"
+            "- tips: a short grammar tip related to the mistakes found\n\n"
+            f"Sentence: \"{sanitized}\""
+        )
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
+        }
+        payload = post_generate_content(self.api_key, self.model, body, timeout=30)
+        text = payload["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(text)
+
+    # --- Translation ---
+    def translate_text(self, text: str, target_lang: str = "auto") -> str:
+        """Translate text between English and Vietnamese (auto-detect direction)."""
+        if not self.enabled:
+            raise RuntimeError("Gemini API key not configured. Set GEMINI_API_KEY to enable translation.")
+        sanitized = PHONE_RE.sub("[phone]", EMAIL_RE.sub("[email]", text))
+        if target_lang == "auto":
+            direction_hint = (
+                "Auto-detect the language. If the text is in English, translate to Vietnamese. "
+                "If the text is in Vietnamese, translate to English. "
+                "If the text is in another language, translate to English."
+            )
+        elif target_lang == "vi":
+            direction_hint = "Translate the text to Vietnamese."
+        else:
+            direction_hint = "Translate the text to English."
+        prompt = (
+            f"You are a professional translator. {direction_hint}\n"
+            "Provide an accurate, natural-sounding translation. "
+            "Keep the original meaning and tone. "
+            "If the text contains idioms or expressions, translate them appropriately.\n\n"
+            f"Text to translate:\n\"{sanitized}\""
+        )
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2},
+        }
+        payload = post_generate_content(self.api_key, self.model, body, timeout=30)
+        return payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    # --- Academic essay writing help ---
+    def academic_essay_help(self, text: str, mode: str = "improve") -> str:
+        """Help write or improve essays in academic English.
+
+        *mode* is one of ``"outline"``, ``"write"``, ``"improve"``.
+        """
+        if not self.enabled:
+            raise RuntimeError("Gemini API key not configured. Set GEMINI_API_KEY to enable essay help.")
+        sanitized = PHONE_RE.sub("[phone]", EMAIL_RE.sub("[email]", text))
+        if mode == "outline":
+            instruction = (
+                "Create a detailed academic essay outline for the following topic. "
+                "Include: thesis statement, 3-4 main body paragraphs with sub-points, "
+                "introduction and conclusion notes. Use formal academic language."
+            )
+        elif mode == "write":
+            instruction = (
+                "Write a well-structured academic paragraph or short essay about the following topic. "
+                "Use formal academic English with proper citations style (if applicable), "
+                "transition words, and sophisticated vocabulary. "
+                "The writing should be suitable for university-level coursework."
+            )
+        else:  # "improve"
+            instruction = (
+                "Improve the following text to make it more academic and formal. "
+                "Fix grammar, enhance vocabulary, improve sentence structure, "
+                "add transition words, and make it suitable for academic writing. "
+                "Return the improved version followed by a brief explanation of the changes."
+            )
+        prompt = f"{instruction}\n\nText/Topic:\n\"{sanitized}\""
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3},
+        }
+        payload = post_generate_content(self.api_key, self.model, body, timeout=60)
+        return payload["candidates"][0]["content"]["parts"][0]["text"].strip()
+

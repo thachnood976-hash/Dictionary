@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,4 +66,13 @@ class AppPaths:
         return self.root / "translation_cache.json"
 
 
-DEFAULT_DATA_DIR = Path.cwd() / "data"
+def _resolve_app_dir() -> Path:
+    """Return the root directory of the app (works for both Python and frozen .exe)."""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller .exe — use the directory containing the .exe
+        return Path(sys.executable).resolve().parent
+    # Normal Python execution — use the project root (parent of dictionary_app/)
+    return Path(__file__).resolve().parent.parent
+
+
+DEFAULT_DATA_DIR = _resolve_app_dir() / "data"

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import difflib
 import json
@@ -15,6 +15,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from .ai import GeminiExplainClient
 from .auto_define import auto_define_word
+from .grammar import analyze_grammar
 from .benchmark import run_all_benchmarks, run_profile
 from .config import DEFAULT_DATA_DIR
 from .flashcards import Flashcard, FlashcardStore
@@ -37,24 +38,24 @@ VIETNAMESE_CHAR_RE = re.compile(
 )
 
 DEFAULT_VIETNAMESE_MEANINGS = {
-    "algorithm": 'Algorithm; a set of steps to solve a problem.',
-    "analysis": 'Analysis; detailed examination of a topic.',
-    "binary": 'Binary; a system with two values, usually 0 and 1.',
-    "biography": "Biography; an account of a person's life.",
-    "biology": 'Biology; the study of living organisms.',
-    "biomedical": 'Biomedical; related to biology and medicine.',
-    "cache": 'A cache stores data for faster access.',
-    "collocation": 'Collocation; words commonly used together.',
-    "dictionary": 'Dictionary; a reference for words and their meanings.',
-    "frequency": 'Frequency; how often something occurs.',
-    "hello": 'Hello.',
-    "hi": 'Hi.',
-    "memory": 'Memory; storage for data.',
-    "nigger": 'A racial slur with severe offensive meaning and should not be used.',
-    "pronunciation": 'Pronunciation; how a word is spoken.',
-    "review": 'Review; revisit to memorize or evaluate.',
-    "trie": 'Trie; a prefix tree data structure.',
-    "unicode": 'Unicode; a universal character encoding standard.',
+    "algorithm": "Thuật toán; tập hợp các bước có thứ tự để giải quyết một bài toán hoặc thực hiện một phép tính.",
+    "analysis": "Phân tích; quá trình xem xét chi tiết các thành phần hoặc cấu trúc của một vấn đề.",
+    "binary": "Nhị phân; hệ thống dùng hai giá trị, thường là 0 và 1, trong toán học và máy tính.",
+    "biography": "Tiểu sử; bài viết kể lại cuộc đời của một người do người khác viết.",
+    "biology": "Sinh học; ngành khoa học nghiên cứu về các sinh vật sống và sự sống.",
+    "biomedical": "Y sinh học; lĩnh vực liên quan đến cả sinh học và y học.",
+    "cache": "Bộ nhớ đệm; thành phần lưu trữ dữ liệu tạm thời giúp truy xuất nhanh hơn.",
+    "collocation": "Cụm từ cố định; tổ hợp các từ thường đi cùng nhau một cách tự nhiên.",
+    "dictionary": "Từ điển; tài liệu tham khảo liệt kê các từ kèm theo nghĩa và cách dùng.",
+    "frequency": "Tần suất; mức độ thường xuyên mà một sự việc xảy ra trong một khoảng thời gian.",
+    "hello": "Xin chào; lời chào hỏi thông dụng khi gặp mặt.",
+    "hi": "Chào; lời chào thân mật, không trang trọng.",
+    "memory": "Bộ nhớ; phần của máy tính dùng để lưu trữ dữ liệu cho việc xử lý.",
+    "nigger": "Từ miệt thị chủng tộc; mang tính xúc phạm nghiêm trọng, không nên sử dụng.",
+    "pronunciation": "Phát âm; cách đọc hoặc phát ra âm thanh của một từ.",
+    "review": "Ôn tập; xem lại kiến thức để ghi nhớ hoặc đánh giá.",
+    "trie": "Cây tiền tố; cấu trúc dữ liệu dạng cây dùng để tìm kiếm theo tiền tố hiệu quả.",
+    "unicode": "Unicode; bộ mã ký tự chuẩn quốc tế, hỗ trợ hầu hết các ngôn ngữ trên thế giới.",
 }
 
 
@@ -165,13 +166,14 @@ class DictionaryAppGUI:
         self.spellcheck_suggestions_widget: ScrolledText | None = None
 
         self._configure_theme()
-        self._refresh_spell_vocabulary()
         self._build_layout()
-        self._render_summary()
-        self._refresh_review_state()
-        self._refresh_flashcards(reset=True)
-        self._update_stats()
         self.show_page(self.current_page)
+        # Defer heavy refreshes to after the window is displayed
+        self.root.after_idle(self._refresh_spell_vocabulary)
+        self.root.after_idle(self._render_summary)
+        self.root.after_idle(self._refresh_review_state)
+        self.root.after_idle(lambda: self._refresh_flashcards(reset=True))
+        self.root.after_idle(self._update_stats)
 
     def _apply_window_icon(self) -> None:
         icon_path = Path(__file__).resolve().parent / "assets" / "app_icon.png"
@@ -194,7 +196,7 @@ class DictionaryAppGUI:
                     normalized[word_key] = meaning_text
         changed = False
         for word_key, meaning_text in DEFAULT_VIETNAMESE_MEANINGS.items():
-            if word_key not in normalized:
+            if normalized.get(word_key) != meaning_text:
                 normalized[word_key] = meaning_text
                 changed = True
         if changed or not self.vietnamese_meaning_path.exists():
@@ -215,6 +217,8 @@ class DictionaryAppGUI:
                 "accent_alt": "#f59e0b",
                 "text": "#e8eaf0",
                 "muted": "#6b7294",
+                "sidebar_text": "#e8eaf0",
+                "sidebar_muted": "#6b7294",
                 "line": "#2a2f4a",
                 "hero": "#0f1322",
                 "hero_line": "#2a2f4a",
@@ -235,6 +239,8 @@ class DictionaryAppGUI:
                 "accent_alt": "#c48a1d",
                 "text": "#15233b",
                 "muted": "#5a6b84",
+                "sidebar_text": "#ffffff",
+                "sidebar_muted": "#b8ccef",
                 "line": "#d6deed",
                 "hero": "#f4f8ff",
                 "hero_line": "#b8ccef",
@@ -250,6 +256,8 @@ class DictionaryAppGUI:
                 "accent_alt": "#2c3b6d",
                 "text": "#f8f9ff",
                 "muted": "#b7c0e3",
+                "sidebar_text": "#f8f9ff",
+                "sidebar_muted": "#b7c0e3",
                 "line": "#41538f",
                 "hero": "#090c3a",
                 "hero_line": "#445798",
@@ -265,6 +273,8 @@ class DictionaryAppGUI:
                 "accent_alt": "#3b3b3b",
                 "text": "#f5e8b8",
                 "muted": "#c7b570",
+                "sidebar_text": "#f5e8b8",
+                "sidebar_muted": "#c7b570",
                 "line": "#51431e",
                 "hero": "#211b0e",
                 "hero_line": "#7b651f",
@@ -289,7 +299,7 @@ class DictionaryAppGUI:
             "button": ("Segoe UI Semibold", size(10)),
             "review_word": ("Segoe UI Semibold", size(24), "bold"),
             "flash_word": ("Segoe UI Semibold", size(30), "bold"),
-            "flash_meaning": ("Segoe UI", size(16)),
+            "flash_meaning": ("Segoe UI", size(20)),
             "flash_title": ("Segoe UI Semibold", size(17)),
             "greeting": ("Segoe UI", size(32), "bold"),
             "nav_item": ("Segoe UI", size(11)),
@@ -335,6 +345,8 @@ class DictionaryAppGUI:
         if self._is_lexicore:
             self._bg_canvas = tk.Canvas(self.main_shell, bg=self.colors["bg"], highlightthickness=0)
             self._bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+            # Defer initial glow draw so the window appears instantly
+            self.root.after(500, self._draw_bg_glows_now)
             self._bg_canvas.bind("<Configure>", self._draw_bg_glows)
 
         workspace = tk.Frame(self.main_shell, bg=self.colors["bg"])
@@ -405,10 +417,10 @@ class DictionaryAppGUI:
         # --- Brand ---
         brand = tk.Frame(header, bg=sidebar_bg)
         brand.pack(fill="x")
-        tk.Label(brand, text='✦ Dictionary', bg=sidebar_bg, fg=self.colors["text"],
+        tk.Label(brand, text='✦ Dictionary', bg=sidebar_bg, fg=self.colors["sidebar_text"],
                  font=self.fonts["brand"]).pack(anchor="w")
         tk.Label(brand, text='AI-powered word lookup',
-                 bg=sidebar_bg, fg=self.colors["muted"], font=self.fonts["subtitle"],
+                 bg=sidebar_bg, fg=self.colors["sidebar_muted"], font=self.fonts["subtitle"],
                  justify="left", wraplength=210).pack(anchor="w", pady=(2, 0))
 
         # --- Separator ---
@@ -435,7 +447,7 @@ class DictionaryAppGUI:
                 padx=14,
                 pady=9,
                 bg=btn_bg,
-                fg=self.colors["text"],
+                fg=self.colors["sidebar_text"],
                 activebackground=self.colors.get("nav_hover", self.colors["primary_dark"]),
                 activeforeground="white",
                 font=btn_font,
@@ -477,10 +489,10 @@ class DictionaryAppGUI:
         status_card.pack(fill="x")
         entry_count = len(self.store.all_words())
         tk.Label(status_card, text=f"📚 {entry_count:,} words loaded",
-                 bg=self.colors.get("nav_hover", sidebar_bg), fg=self.colors["text"],
+                 bg=self.colors.get("nav_hover", sidebar_bg), fg=self.colors["sidebar_text"],
                  font=self.fonts["status_card"]).pack(anchor="w")
         tk.Label(status_card, text=f"🎯 {len(self.review_store.due_items())} due today",
-                 bg=self.colors.get("nav_hover", sidebar_bg), fg=self.colors["muted"],
+                 bg=self.colors.get("nav_hover", sidebar_bg), fg=self.colors["sidebar_muted"],
                  font=self.fonts["status_card"]).pack(anchor="w", pady=(2, 0))
 
     def _build_pages(self, parent: tk.Frame) -> None:
@@ -804,9 +816,12 @@ class DictionaryAppGUI:
         # Write meaning
         self._write_text(self._home_meaning_output, self.lookup_meaning_text)
 
-        # Write Vietnamese
-        vn = self._get_vietnamese_meaning_from_database(self.current_lookup_word)
-        self._write_text(self._home_vn_output, vn or "No Vietnamese meaning available.")
+        # Write Vietnamese — match the number of English definition lines
+        word_key = normalize_word(self.current_lookup_word)
+        en_meaning = self.store.lookup(word_key) or ""
+        en_lines = [l.strip() for l in en_meaning.splitlines() if l.strip()] if en_meaning else []
+        vn = self._get_vietnamese_meaning_for_lines(word_key, en_lines)
+        self._write_text(self._home_vn_output, vn or "Không có nghĩa tiếng Việt.")
 
         # Show the results area
         if not self._home_results_visible:
@@ -1102,14 +1117,23 @@ class DictionaryAppGUI:
             fg=self.colors["text"],
             font=self.fonts["flash_word"],
             anchor="center",
-        ).pack(anchor="center", pady=(8, 12))
+        ).pack(anchor="center", pady=(8, 0))
 
-        self.flashcard_output = self._text_panel(content, height=14)
+        # Spacer to push meaning to vertical center
+        top_spacer = tk.Frame(content, bg=self.colors["surface_alt"])
+        top_spacer.pack(fill="both", expand=True)
+
+        self.flashcard_output = self._text_panel(content, height=8)
         self.flashcard_output.configure(
             wrap="word",
             font=self.fonts["flash_meaning"],
         )
-        self.flashcard_output.pack(fill="both", expand=True)
+        self.flashcard_output.pack(fill="x", padx=20)
+
+        # Bottom spacer for symmetry
+        bottom_spacer = tk.Frame(content, bg=self.colors["surface_alt"])
+        bottom_spacer.pack(fill="both", expand=True)
+
         self._bind_flashcard_click_targets(card)
 
     def _build_spellcheck_page(self, parent: tk.Frame) -> None:
@@ -1128,6 +1152,7 @@ class DictionaryAppGUI:
         action_row = tk.Frame(shell, bg=self.colors["surface"])
         action_row.pack(fill="x", pady=(10, 0))
         self._action_button(action_row, 'Check Grammar', self.check_sentence_spelling, self.colors["primary"]).pack(side="left")
+        self._action_button(action_row, '✨ AI Grammar', self.ai_grammar_check, self.colors["accent_alt"]).pack(side="left", padx=8)
         self._action_button(action_row, 'Load Example', self.load_spellcheck_example, self.colors["accent_alt"]).pack(side="left", padx=8)
         self._action_button(action_row, 'Clear', self.clear_spellcheck, self.colors["accent"]).pack(side="left")
 
@@ -1186,6 +1211,10 @@ class DictionaryAppGUI:
         ask_actions = tk.Frame(top, bg=self.colors["surface"])
         ask_actions.pack(fill="x", pady=(12, 0))
         self._action_button(ask_actions, 'Ask Assistant', self.ask_assistant, self.colors["primary"]).pack(side="left")
+        self._action_button(ask_actions, '🌐 Translate', self.translate_text_action, self.colors["accent_alt"]).pack(side="left", padx=8)
+        self._action_button(ask_actions, '📝 Essay Improve', self.essay_improve_action, self.colors["accent_alt"]).pack(side="left", padx=8)
+        self._action_button(ask_actions, '📑 Essay Outline', self.essay_outline_action, self.colors["accent_alt"]).pack(side="left", padx=8)
+        self._action_button(ask_actions, '✏ Essay Write', self.essay_write_action, self.colors["accent_alt"]).pack(side="left", padx=8)
         self._action_button(ask_actions, 'Use Current Word', self.seed_assistant_prompt, self.colors["accent_alt"]).pack(side="left", padx=8)
 
         bottom = self._card(parent)
@@ -1245,8 +1274,18 @@ class DictionaryAppGUI:
         widget.configure(padx=12, pady=12)
         return widget
 
+    @staticmethod
+    def _is_light_color(hex_color: str) -> bool:
+        """Return True if the hex color is light (high luminance)."""
+        c = hex_color.lstrip("#")
+        if len(c) == 3:
+            c = "".join(ch * 2 for ch in c)
+        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return luminance > 160
+
     def _action_button(self, parent: tk.Widget, text: str, command, color: str) -> tk.Button:
-        fg = "white"
+        fg = "black" if self._is_light_color(color) else "white"
         return tk.Button(
             parent,
             text=text,
@@ -1370,7 +1409,7 @@ class DictionaryAppGUI:
                 )
             else:
                 self.nav_buttons[current_id].configure(
-                    bg=inactive_bg, fg=self.colors["text"], font=self.fonts["nav_item"]
+                    bg=inactive_bg, fg=self.colors["sidebar_text"], font=self.fonts["nav_item"]
                 )
         if page_id == "review":
             self._refresh_review_state()
@@ -1461,7 +1500,7 @@ class DictionaryAppGUI:
         if not sentence:
             messagebox.showwarning('Grammar', 'Enter a sentence first.')
             return
-        issues, corrected = self._analyze_sentence_corrections(sentence, self.spell_vocabulary, self.spell_candidates)
+        issues, corrected = analyze_grammar(sentence, self.spell_vocabulary, self.spell_candidates)
         self.spellcheck_result_text = sentence
         self._render_spellcheck_output(sentence, issues)
         self.spellcheck_corrected_var.set(corrected)
@@ -1511,78 +1550,124 @@ class DictionaryAppGUI:
         vocabulary: set[str] | None = None,
         candidates: list[str] | None = None,
     ) -> tuple[list[dict[str, object]], str]:
-        token_matches = list(re.finditer(r"[A-Za-z']+", sentence))
-        tokens = [(match.group(0), match.start(), match.end()) for match in token_matches]
-        issues: list[dict[str, object]] = []
-        seen_spans: set[tuple[int, int]] = set()
+        """Delegate to the comprehensive grammar engine."""
+        return analyze_grammar(sentence, vocabulary, candidates)
 
-        vocab = vocabulary or set()
-        lookups = candidates or sorted(vocab)
+    # --- AI Grammar Check ---
+    def ai_grammar_check(self) -> None:
+        """Use Gemini AI for advanced grammar correction."""
+        sentence = self._get_text_widget(self.spellcheck_input_widget).strip()
+        if not sentence:
+            messagebox.showwarning('Grammar', 'Enter a sentence first.')
+            return
+        if not self.ai_client.enabled:
+            messagebox.showwarning('Grammar', 'Gemini API key is not configured. Use the offline Check Grammar button instead.')
+            return
+        self.spellcheck_meta_var.set('AI is analyzing your sentence\u2026')
+        self.status_var.set('Sending to AI for grammar analysis\u2026')
+        self.root.update_idletasks()
 
-        def add_issue(start: int, end: int, original: str, suggestion: str, reason: str) -> None:
-            if not suggestion or suggestion == original:
-                return
-            span = (start, end)
-            if span in seen_spans:
-                return
-            seen_spans.add(span)
-            issues.append(
-                {
-                    "start": start,
-                    "end": end,
-                    "original": original,
-                    "suggestion": suggestion,
-                    "reason": reason,
-                }
-            )
+        def _fetch():
+            try:
+                result = self.ai_client.grammar_correct(sentence)
+                self.root.after(0, lambda: self._on_ai_grammar_done(sentence, result))
+            except Exception as exc:
+                self.root.after(0, lambda: self._on_ai_grammar_error(str(exc)))
+        threading.Thread(target=_fetch, daemon=True).start()
 
-        for index, (token, start, end) in enumerate(tokens):
-            lower = token.lower()
-            previous = tokens[index - 1][0].lower() if index > 0 else ""
-            next_word = tokens[index + 1][0].lower() if index + 1 < len(tokens) else ""
+    def _on_ai_grammar_done(self, original: str, result: dict) -> None:
+        corrected = result.get('corrected', original)
+        formal = result.get('formal_version', '')
+        tips = result.get('tips', '')
+        ai_issues = result.get('issues', [])
+        self.spellcheck_corrected_var.set(corrected)
+        self.spellcheck_meta_var.set(f'AI found {len(ai_issues)} issue(s).')
+        self._render_spellcheck_output(original, [])
+        lines = []
+        for idx, issue in enumerate(ai_issues, 1):
+            orig = issue.get('original', '')
+            corr = issue.get('correction', '')
+            expl = issue.get('explanation', '')
+            lines.append(f"{idx}. '{orig}' \u2192 '{corr}' | {expl}")
+        if formal:
+            lines.append(f"\n\U0001f4dd Formal version:\n{formal}")
+        if tips:
+            lines.append(f"\n\U0001f4a1 Tip: {tips}")
+        self.spellcheck_suggestions_text = '\n'.join(lines) if lines else 'No issues found.'
+        self._write_text(self.spellcheck_suggestions_widget, self.spellcheck_suggestions_text)
+        if corrected != original:
+            self._set_text_widget(self.spellcheck_input_widget, corrected)
+        self.status_var.set('AI grammar check complete.')
 
-            if lower == "i" and token != "I":
-                add_issue(start, end, token, "I", "Pronoun 'I' should be uppercase.")
-            if previous == "i" and lower in {"is", "are", "was", "were"}:
-                add_issue(start, end, token, DictionaryAppGUI._apply_case(token, "am"), "Use 'am' after 'I'.")
-                continue
-            if previous in {"he", "she", "it"} and lower in {"are", "were"}:
-                add_issue(start, end, token, DictionaryAppGUI._apply_case(token, "is"), "Use 'is' with he/she/it.")
-                continue
-            if previous in {"you", "we", "they"} and lower in {"is", "was"}:
-                add_issue(start, end, token, DictionaryAppGUI._apply_case(token, "are"), "Use 'are' with you/we/they.")
-                continue
-            if lower == "a" and next_word and next_word[0] in "aeiou":
-                add_issue(start, end, token, DictionaryAppGUI._apply_case(token, "an"), "Use 'an' before vowel sounds.")
-            if lower == "an" and next_word and next_word[0] not in "aeiou":
-                add_issue(start, end, token, DictionaryAppGUI._apply_case(token, "a"), "Use 'a' before consonant sounds.")
+    def _on_ai_grammar_error(self, error: str) -> None:
+        self.spellcheck_meta_var.set('AI grammar check failed.')
+        self.status_var.set('AI grammar check failed.')
+        messagebox.showerror('AI Grammar', error)
 
-            if not vocab or len(lower) <= 2:
-                continue
-            if lower in vocab:
-                continue
-            if token[0].isupper():
-                continue
-            close_matches = difflib.get_close_matches(lower, lookups, n=1, cutoff=0.84)
-            if close_matches:
-                suggestion = DictionaryAppGUI._apply_case(token, close_matches[0])
-                add_issue(start, end, token, suggestion, 'Possible spelling mistake.')
+    # --- Translation ---
+    def translate_text_action(self) -> None:
+        """Translate the text in the assistant input field."""
+        text = self._get_text_widget(self.assistant_input_widget).strip()
+        if not text:
+            messagebox.showwarning('Translate', 'Enter text to translate first.')
+            return
+        if not self.ai_client.enabled:
+            messagebox.showwarning('Translate', 'Gemini API key is not configured.')
+            return
+        self.assistant_meta_var.set('Translating\u2026')
+        self.status_var.set('Translating text\u2026')
+        self.root.update_idletasks()
 
-        issues.sort(key=lambda issue: int(issue["start"]))
-        corrected_parts: list[str] = []
-        cursor = 0
-        for issue in issues:
-            start = int(issue["start"])
-            end = int(issue["end"])
-            suggestion = str(issue["suggestion"])
-            if start < cursor:
-                continue
-            corrected_parts.append(sentence[cursor:start])
-            corrected_parts.append(suggestion)
-            cursor = end
-        corrected_parts.append(sentence[cursor:])
-        corrected_sentence = "".join(corrected_parts)
-        return issues, corrected_sentence
+        def _fetch():
+            try:
+                result = self.ai_client.translate_text(text)
+                self.root.after(0, lambda: self._on_translate_done(result))
+            except Exception as exc:
+                self.root.after(0, lambda: messagebox.showerror('Translate', str(exc)))
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_translate_done(self, result: str) -> None:
+        self.assistant_meta_var.set('Translation complete.')
+        self.assistant_output_text = result
+        self._write_text(self.assistant_output_widget, self.assistant_output_text)
+        self.status_var.set('Translation complete.')
+
+    # --- Academic Essay Help ---
+    def _essay_action(self, mode: str, label: str) -> None:
+        text = self._get_text_widget(self.assistant_input_widget).strip()
+        if not text:
+            messagebox.showwarning('Essay', 'Enter a topic or text first.')
+            return
+        if not self.ai_client.enabled:
+            messagebox.showwarning('Essay', 'Gemini API key is not configured.')
+            return
+        self.assistant_meta_var.set(f'{label}\u2026')
+        self.status_var.set(f'{label}\u2026')
+        self.root.update_idletasks()
+
+        def _fetch():
+            try:
+                result = self.ai_client.academic_essay_help(text, mode=mode)
+                self.root.after(0, lambda: self._on_essay_done(result, label))
+            except Exception as exc:
+                self.root.after(0, lambda: messagebox.showerror('Essay', str(exc)))
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_essay_done(self, result: str, label: str) -> None:
+        self.assistant_meta_var.set(f'{label} \u2014 done.')
+        self.assistant_output_text = result
+        self._write_text(self.assistant_output_widget, self.assistant_output_text)
+        self.status_var.set(f'{label} complete.')
+
+    def essay_improve_action(self) -> None:
+        self._essay_action('improve', 'Improving text to academic style')
+
+    def essay_outline_action(self) -> None:
+        self._essay_action('outline', 'Creating essay outline')
+
+    def essay_write_action(self) -> None:
+        self._essay_action('write', 'Writing academic essay')
+
 
     def lookup_word(self) -> None:
         word = self.lookup_word_var.get().strip()
@@ -2052,8 +2137,13 @@ class DictionaryAppGUI:
         custom_card = self.flashcard_store.get(word)
         if custom_card is not None:
             payload = custom_card.back.strip()
-            return payload if payload else 'No custom meaning yet.'
-        meaning = self.store.lookup(word) or 'No local meaning stored.'
+            return payload if payload else 'Chưa có nghĩa tùy chỉnh.'
+        # Show Vietnamese meaning on flashcard
+        word_key = normalize_word(word)
+        vn = self._get_vietnamese_meaning_from_database(word_key)
+        if vn:
+            return vn
+        meaning = self.store.lookup(word) or 'Không có nghĩa được lưu.'
         return self._basic_flashcard_meaning(meaning)
 
     def _build_flashcard_match_pairs(self, limit: int = 8) -> list[tuple[str, str, str]]:
@@ -2989,6 +3079,7 @@ class DictionaryAppGUI:
         self._write_text(self.summary_output, self.summary_text)
 
     def _get_vietnamese_meaning_from_database(self, word_key: str) -> str:
+        """Return Vietnamese meaning as a single string (legacy, used by summary/review)."""
         from_map = " ".join(self.vietnamese_meanings.get(word_key, "").split()).strip()
         if from_map:
             return from_map
@@ -3000,9 +3091,42 @@ class DictionaryAppGUI:
                 return "\n".join(lines[:4])
 
         # Fallback: fetch Vietnamese translation from online API in background
+        en_lines = [l.strip() for l in meaning_payload.splitlines() if l.strip()] if meaning_payload else [word_key]
         def _fetch_translation():
             try:
-                translated = self.translation_client.translate(word_key)
+                translated = self.translation_client.translate_lines(en_lines)
+                if translated:
+                    self.root.after(0, lambda: self._on_translation_done(word_key, translated))
+            except Exception:
+                pass
+        threading.Thread(target=_fetch_translation, daemon=True).start()
+        return ""
+
+    def _get_vietnamese_meaning_for_lines(self, word_key: str, en_lines: list[str]) -> str:
+        """Return Vietnamese meaning with same number of lines as English definitions."""
+        from_map = self.vietnamese_meanings.get(word_key, "").strip()
+        if from_map:
+            vn_lines = [l.strip() for l in from_map.split("\n") if l.strip()]
+            # If cached VN has enough lines, return matched count
+            if len(vn_lines) >= len(en_lines) and en_lines:
+                return "\n".join(vn_lines[:len(en_lines)])
+            elif vn_lines:
+                return "\n".join(vn_lines)
+
+        # Try extracting Vietnamese from the stored meaning payload
+        meaning_payload = self.store.lookup(word_key) or ""
+        if meaning_payload:
+            lines = self._extract_vietnamese_lines(meaning_payload)
+            if lines:
+                if en_lines:
+                    return "\n".join(lines[:len(en_lines)])
+                return "\n".join(lines[:4])
+
+        # Fallback: translate each English line individually in background
+        source_lines = en_lines if en_lines else [word_key]
+        def _fetch_translation():
+            try:
+                translated = self.translation_client.translate_lines(source_lines)
                 if translated:
                     self.root.after(0, lambda: self._on_translation_done(word_key, translated))
             except Exception:
